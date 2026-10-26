@@ -218,4 +218,8 @@ Item {
         guidedValueSlider:  _guidedValueSlider
         visible:            !QGroundControl.videoManager.fullScreen
     }
+    F9InstrumentPanel {
+        anchors.fill:       parent
+        z:                  QGroundControl.zOrderTopMost + 1
+    }
 }
