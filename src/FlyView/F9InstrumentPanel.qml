@@ -35,6 +35,70 @@ Item {
     readonly property string armText:    !hasVehicle ? root.t("未连接", "OFFLINE") : (vehicle.armed ? root.t("已解锁", "ARMED") : root.t("已加锁", "DISARMED"))
     readonly property string linkText:   !hasVehicle ? root.t("无信号", "NO LINK") : (vehicle.communicationLost ? root.t("通信中断", "LINK LOST") : root.t("正常", "OK"))
 
+    // ======== 指令二次确认（LLR-014 / HLR-009）========
+    // 设计要点：起效需两次独立动作——先点功能按钮，再在另一位置长按 2 s；
+    // 确认框 6 s 未操作自动取消；点击遮罩即取消。任一步不满足都不下发。
+    property int    pendingIdx: -1          // -1 = 无待确认指令
+    property string pendingTitle: ""
+    property string pendingDetail: ""
+    property real   holdMs: 0               // 长按进度（毫秒）
+    property string toastText: ""
+    readonly property int holdRequiredMs: 2000
+    readonly property int confirmAutoCancelMs: 6000
+
+    function requestCommand(idx) {
+        if (idx === 3) {                    // 起飞
+            pendingTitle  = root.t("确认执行：起飞", "CONFIRM: TAKEOFF")
+            pendingDetail = root.t("飞行器将自动爬升至起飞高度并悬停。\n请确认起降区无人、电池充足、GPS 状态良好。",
+                                   "The aircraft will climb to the takeoff altitude and hover.\nVerify the area is clear, battery is sufficient and GPS is healthy.")
+        } else if (idx === 5) {             // 返航
+            pendingTitle  = root.t("确认执行：返航", "CONFIRM: RETURN TO LAUNCH")
+            pendingDetail = root.t("飞行器将中断当前任务，返回起飞点并自动降落。\n请确认返航路径无障碍、着陆区可用。",
+                                   "The aircraft will abort the current mission, return to launch and land.\nVerify the return path and landing area are clear.")
+        } else {
+            return
+        }
+        holdMs = 0
+        pendingIdx = idx
+    }
+
+    function cancelCommand() {
+        holdMs = 0
+        pendingIdx = -1
+    }
+
+    function dispatchCommand(idx) {
+        var label = (idx === 3) ? root.t("起飞", "TAKEOFF") : root.t("返航", "RTL")
+        if (!hasVehicle) {
+            cancelCommand()
+            showToast(root.t("未连接飞控，指令未下发", "No vehicle connected — command not sent"))
+            return
+        }
+        if (idx === 3) {
+            if (!vehicle.armed) {
+                cancelCommand()
+                showToast(root.t("飞行器未解锁，起飞指令被拒绝", "Vehicle disarmed — takeoff rejected"))
+                return
+            }
+            vehicle.startTakeoff()
+        } else if (idx === 5) {
+            vehicle.flightMode = "RTL"
+        }
+        cancelCommand()
+        showToast(root.t("已下发：", "Sent: ") + label)
+    }
+
+    function showToast(msg) {
+        toastText = msg
+        toastTimer.restart()
+    }
+
+    Timer {
+        id: toastTimer
+        interval: 2200
+        onTriggered: root.toastText = ""
+    }
+
     // ======== 主题（深色 / 浅色）========
     property bool darkMode: true
     property bool englishMode: false
@@ -785,22 +849,24 @@ Item {
 
                 Repeater {
                     model: [
-                        { t: root.t("姿态", "Stab"),       on: true  },
-                        { t: root.t("定点", "Loiter"),       on: false },
-                        { t: root.t("定高", "AltHold"),       on: false },
-                        { t: root.t("起飞", "Takeoff"),       on: false },
-                        { t: root.t("降落", "Land"),       on: false },
-                        { t: root.t("返航", "RTL"),       on: false },
-                        { t: root.t("保持待定义", "HOLD"), on: false },
-                        { t: root.t("触屏接管", "Touch"),   on: false },
-                        { t: root.t("更多", "More"),       on: false }
+                        { t: root.t("姿态", "Stab"),       on: true,  confirm: false },
+                        { t: root.t("定点", "Loiter"),     on: false, confirm: false },
+                        { t: root.t("定高", "AltHold"),    on: false, confirm: false },
+                        { t: root.t("起飞", "Takeoff"),    on: false, confirm: true  },
+                        { t: root.t("降落", "Land"),       on: false, confirm: false },
+                        { t: root.t("返航", "RTL"),        on: false, confirm: true  },
+                        { t: root.t("保持待定义", "HOLD"), on: false, confirm: false },
+                        { t: root.t("触屏接管", "Touch"),  on: false, confirm: false },
+                        { t: root.t("更多", "More"),       on: false, confirm: false }
                     ]
                     delegate: Rectangle {
                         Layout.fillWidth: true
                         Layout.preferredHeight: btnText.implicitHeight + ScreenTools.defaultFontPixelHeight * 1.5
                         radius: 3
                         color:        modelData.on ? root.theme.active : root.theme.btnBg
-                        border.color: modelData.on ? root.theme.active : root.theme.btnBd
+                        // 需二次确认的按钮描边用警示色，视觉上与普通按钮区分
+                        border.color: modelData.on ? root.theme.active
+                                                   : (modelData.confirm ? root.theme.red : root.theme.btnBd)
                         border.width: 1
 
                         QGCLabel {
@@ -810,15 +876,18 @@ Item {
                             horizontalAlignment: Text.AlignHCenter
                             elide: Text.ElideRight
                             text:  modelData.t
-                            color: modelData.on ? root.theme.onActive : root.theme.value
+                            color: modelData.on ? root.theme.onActive
+                                                : (modelData.confirm ? root.theme.red : root.theme.value)
                             font.pixelSize: panel.smlFont
-                            font.bold: modelData.on
+                            font.bold: modelData.on || modelData.confirm
                         }
 
                         MouseArea {
                             anchors.fill: parent
                             onClicked: {
-                                if (index === 8)            // 更多
+                                if (modelData.confirm)
+                                    root.requestCommand(index)      // 起飞 / 返航：进二次确认
+                                else if (index === 8)               // 更多：收起面板
                                     root.expanded = false
                             }
                         }
@@ -826,5 +895,171 @@ Item {
                 }
             }
         }
+        // ============ 指令二次确认遮罩（LLR-014）============
+        Item {
+            id: confirmLayer
+            anchors.fill: parent
+            visible: root.pendingIdx >= 0
+            z: 100
+
+            property int cancelLeft: 6
+            onVisibleChanged: if (visible) cancelLeft = 6
+
+            // 遮罩本身可点，点即取消
+            Rectangle {
+                anchors.fill: parent
+                color: "#000000"
+                opacity: root.darkMode ? 0.74 : 0.58
+                MouseArea { anchors.fill: parent; onClicked: root.cancelCommand() }
+            }
+
+            Rectangle {
+                id: confirmCard
+                anchors.centerIn: parent
+                width:  Math.min(parent.width * 0.82, 720)
+                height: cardCol.implicitHeight + ScreenTools.defaultFontPixelHeight * 2.6
+                radius: 6
+                color:        root.theme.panel
+                border.color: root.theme.red
+                border.width: 2
+
+                Column {
+                    id: cardCol
+                    anchors.centerIn: parent
+                    width: parent.width - ScreenTools.defaultFontPixelWidth * 5
+                    spacing: ScreenTools.defaultFontPixelHeight * 0.9
+
+                    QGCLabel {
+                        width: parent.width
+                        horizontalAlignment: Text.AlignHCenter
+                        text: root.pendingTitle
+                        color: root.theme.red
+                        font.pixelSize: panel.midFont * 1.05
+                        font.bold: true
+                    }
+                    QGCLabel {
+                        width: parent.width
+                        horizontalAlignment: Text.AlignHCenter
+                        wrapMode: Text.WordWrap
+                        text: root.pendingDetail
+                        color: root.theme.value
+                        font.pixelSize: panel.smlFont * 1.15
+                        lineHeight: 1.35
+                    }
+                    QGCLabel {
+                        width: parent.width
+                        horizontalAlignment: Text.AlignHCenter
+                        text: root.t("未操作将在 ", "Auto-cancel in ") + confirmLayer.cancelLeft + root.t(" 秒后自动取消", " s")
+                        color: root.theme.label
+                        font.pixelSize: panel.smlFont * 0.9
+                    }
+
+                    Row {
+                        anchors.horizontalCenter: parent.horizontalCenter
+                        spacing: ScreenTools.defaultFontPixelWidth * 1.8
+
+                        Rectangle {
+                            width: cardCol.width * 0.30
+                            height: panel.bigFont * 0.60
+                            radius: 4
+                            color: "transparent"
+                            border.color: root.theme.btnBd
+                            border.width: 1
+                            QGCLabel {
+                                anchors.centerIn: parent
+                                text: root.t("取消", "CANCEL")
+                                color: root.theme.value
+                                font.pixelSize: panel.smlFont * 1.2
+                                font.bold: true
+                            }
+                            MouseArea { anchors.fill: parent; onClicked: root.cancelCommand() }
+                        }
+
+                        Rectangle {
+                            id: holdBtn
+                            width: Math.max(cardCol.width * 0.44, 210)
+                            height: panel.bigFont * 0.60
+                            radius: 4
+                            color:        root.theme.btnBg
+                            border.color: root.theme.red
+                            border.width: 1
+                            clip: true
+
+                            // 长按进度填充
+                            Rectangle {
+                                anchors.left: parent.left
+                                anchors.top: parent.top
+                                anchors.bottom: parent.bottom
+                                width: parent.width * Math.min(root.holdMs / root.holdRequiredMs, 1)
+                                color: root.theme.red
+                            }
+                            QGCLabel {
+                                anchors.centerIn: parent
+                                wrapMode: Text.NoWrap
+                                text: root.holdMs > 0 ? root.t("继续按住…", "KEEP HOLDING…")
+                                                      : root.t("长按 2 秒确认", "HOLD 2 s TO CONFIRM")
+                                color: (root.holdMs / root.holdRequiredMs > 0.5) ? "#FFFFFF" : root.theme.red
+                                font.pixelSize: panel.smlFont * 1.05
+                                font.bold: true
+                            }
+                            MouseArea {
+                                anchors.fill: parent
+                                onPressed:  { root.holdMs = 0; holdTimer.start() }
+                                onReleased: { holdTimer.stop(); root.holdMs = 0 }
+                                onCanceled: { holdTimer.stop(); root.holdMs = 0 }
+                            }
+                        }
+                    }
+                }
+            }
+
+            Timer {
+                id: holdTimer
+                interval: 20
+                repeat: true
+                onTriggered: {
+                    root.holdMs += interval
+                    if (root.holdMs >= root.holdRequiredMs) {
+                        stop()
+                        root.dispatchCommand(root.pendingIdx)
+                    }
+                }
+            }
+
+            Timer {
+                interval: 1000
+                repeat: true
+                running: confirmLayer.visible
+                onTriggered: {
+                    if (confirmLayer.cancelLeft <= 1)
+                        root.cancelCommand()
+                    else
+                        confirmLayer.cancelLeft--
+                }
+            }
+        }
+
+        // ============ 轻提示 ============
+        Rectangle {
+            anchors.horizontalCenter: parent.horizontalCenter
+            anchors.bottom: parent.bottom
+            anchors.bottomMargin: panel.bottomH + ScreenTools.defaultFontPixelHeight * 2.6
+            width:  toastLabel.implicitWidth + ScreenTools.defaultFontPixelWidth * 3
+            height: toastLabel.implicitHeight + ScreenTools.defaultFontPixelHeight * 1.1
+            radius: height / 2
+            color: "#000000"
+            opacity: 0.86
+            visible: root.toastText !== ""
+            z: 99
+
+            QGCLabel {
+                id: toastLabel
+                anchors.centerIn: parent
+                text: root.toastText
+                color: "#FFFFFF"
+                font.pixelSize: panel.smlFont * 1.1
+            }
+        }
+
     }
 }
