@@ -32,21 +32,71 @@ Item {
     readonly property real battTemp:    hasVehicle && vehicle.battery ? vehicle.battery.temperature.value : NaN
     readonly property int  sats:        hasVehicle && vehicle.gps ? vehicle.gps.satelliteCount.value : 0
     readonly property string flightModeText: hasVehicle ? vehicle.flightMode : "—"
-    readonly property string armText:    !hasVehicle ? "未连接" : (vehicle.armed ? "已解锁" : "已加锁")
-    readonly property string linkText:   !hasVehicle ? "无信号" : (vehicle.communicationLost ? "通信中断" : "正常")
+    readonly property string armText:    !hasVehicle ? root.t("未连接", "OFFLINE") : (vehicle.armed ? root.t("已解锁", "ARMED") : root.t("已加锁", "DISARMED"))
+    readonly property string linkText:   !hasVehicle ? root.t("无信号", "NO LINK") : (vehicle.communicationLost ? root.t("通信中断", "LINK LOST") : root.t("正常", "OK"))
 
-    // ======== 配色 ========
-    readonly property color cBg:      "#000000"
-    readonly property color cPanel:   "#050A0D"
-    readonly property color cCyan:    "#25D6EA"
-    readonly property color cCyanDim: "#0F6E7A"
-    readonly property color cLabel:   "#7E8A93"
-    readonly property color cValue:   "#F2F7F9"
-    readonly property color cDivider: "#163038"
-    readonly property color cBtnBg:   "#08131A"
-    readonly property color cBtnBd:   "#1D3B45"
-    readonly property color cActive:  "#12A395"
-    readonly property color cRed:     "#E23B3B"
+    // ======== 主题（深色 / 浅色）========
+    property bool darkMode: true
+    property bool englishMode: false
+
+    readonly property var theme: darkMode ? __darkTheme : __lightTheme
+
+    readonly property var __darkTheme: ({
+        bg:         "#000000",
+        panel:      "#050A0D",
+        cyan:       "#25D6EA",
+        cyanDim:    "#0F6E7A",
+        label:      "#7E8A93",
+        value:      "#F2F7F9",
+        divider:    "#163038",
+        btnBg:      "#08131A",
+        btnBd:      "#1D3B45",
+        active:     "#12A395",
+        red:        "#E23B3B",
+        launcherBg: "#0A1A20",
+        barTrack:   "#0C2229",
+        radar:      "#1B4550",
+        radarDot:   "#123942",
+        cellOn:     "#35C759",
+        cellOff:    "#12262E",
+        tickLong:   "#9FB3BC",
+        tickShort:  "#3A4E57",
+        tickMain:   "#E8F4F8",
+        ringStroke: "#2A3D46",
+        innerRing:  "#DDE9EF",
+        heading:    "#FFFFFF",
+        onActive:   "#04241F"
+    })
+
+    readonly property var __lightTheme: ({
+        bg:         "#EEF2F5",
+        panel:      "#FFFFFF",
+        cyan:       "#0B7C90",
+        cyanDim:    "#63A7B4",
+        label:      "#5B6B75",
+        value:      "#0E1A21",
+        divider:    "#C9D6DE",
+        btnBg:      "#FFFFFF",
+        btnBd:      "#B7C7D1",
+        active:     "#0B7C90",
+        red:        "#C62828",
+        launcherBg: "#FFFFFF",
+        barTrack:   "#DCE6EC",
+        radar:      "#B9CBD5",
+        radarDot:   "#8FA9B6",
+        cellOn:     "#1E9E4A",
+        cellOff:    "#D3DFE6",
+        tickLong:   "#3C4E58",
+        tickShort:  "#8FA2AC",
+        tickMain:   "#101A20",
+        ringStroke: "#A8BAC4",
+        innerRing:  "#37474F",
+        heading:    "#101A20",
+        onActive:   "#FFFFFF"
+    })
+
+    // ======== 双语 ========
+    function t(zh, en) { return englishMode ? en : zh }
 
     function fmt(v, digits) {
         if (v === undefined || v === null || isNaN(v)) return "—"
@@ -64,15 +114,15 @@ Item {
         width:  launcherText.implicitWidth + ScreenTools.defaultFontPixelWidth * 2.4
         height: launcherText.implicitHeight + ScreenTools.defaultFontPixelHeight * 0.8
         radius: height / 2
-        color:        launcherMouse.pressed ? root.cActive : "#0A1A20"
-        border.color: root.cCyan
+        color:        launcherMouse.pressed ? root.theme.active : root.theme.launcherBg
+        border.color: root.theme.cyan
         border.width: 1
 
         QGCLabel {
             id: launcherText
             anchors.centerIn: parent
-            text:  qsTr("F9 仪表")
-            color: root.cCyan
+            text:  root.t("F9 仪表", "F9 PANEL")
+            color: root.theme.cyan
             font.bold: true
             font.pixelSize: ScreenTools.defaultFontPixelHeight * 0.85
         }
@@ -89,16 +139,18 @@ Item {
         id: panel
         visible: root.expanded
         anchors.fill: parent
-        color: root.cBg
+        color: root.theme.bg
         focus: true
 
+        // 字号基准：横屏取高度；竖屏取宽度折算，避免字号随高度爆炸
+        readonly property real vUnit:   Math.min(height, width * 0.62)
         readonly property real topH:    height * 0.078
         readonly property real bottomH: height * 0.135
         readonly property real sidePad: width * 0.022
         readonly property real dialDia: Math.min((height - topH - bottomH) * 0.82, width * 0.40)
-        readonly property real bigFont: height * 0.115
-        readonly property real midFont: height * 0.038
-        readonly property real smlFont: height * 0.026
+        readonly property real bigFont: vUnit * 0.115
+        readonly property real midFont: vUnit * 0.038
+        readonly property real smlFont: vUnit * 0.026
 
         // ============ 顶栏 ============
         Item {
@@ -107,29 +159,33 @@ Item {
             width: parent.width
             height: panel.topH
 
+            readonly property real chipH: ScreenTools.defaultFontPixelHeight * 1.95
+
             Row {
                 anchors.left: parent.left
                 anchors.leftMargin: panel.sidePad
                 anchors.verticalCenter: parent.verticalCenter
                 spacing: ScreenTools.defaultFontPixelWidth * 1.6
+                // 竖屏宽度不足时隐藏这排状态文字，避免与右侧页签/开关重叠
+                visible: panel.width >= panel.height * 1.15
 
                 Repeater {
                     model: [
-                        { k: qsTr("控制权"), v: "—" },
-                        { k: qsTr("飞控"),   v: root.armText },
-                        { k: qsTr("当前模式"), v: root.flightModeText },
-                        { k: qsTr("触屏操纵"), v: qsTr("关闭") }
+                        { k: root.t("控制权", "CTRL"), v: "—" },
+                        { k: root.t("飞控", "FC"),   v: root.armText },
+                        { k: root.t("当前模式", "MODE"), v: root.flightModeText },
+                        { k: root.t("触屏操纵", "TOUCH"), v: root.t("关闭", "OFF") }
                     ]
                     delegate: Row {
                         spacing: ScreenTools.defaultFontPixelWidth * 0.5
                         QGCLabel {
                             text: modelData.k + ":"
-                            color: root.cLabel
+                            color: root.theme.label
                             font.pixelSize: panel.smlFont
                         }
                         QGCLabel {
                             text: modelData.v
-                            color: root.cValue
+                            color: root.theme.value
                             font.pixelSize: panel.smlFont
                             font.bold: true
                         }
@@ -137,28 +193,83 @@ Item {
                 }
             }
 
-            // 右上角页签
+            // 主题 / 语言切换
             Row {
+                id: toggles
                 anchors.right: parent.right
                 anchors.rightMargin: panel.sidePad
+                anchors.verticalCenter: parent.verticalCenter
+                spacing: ScreenTools.defaultFontPixelWidth * 0.6
+
+                Rectangle {
+                    id: themeChip
+                    width:  themeLabel.implicitWidth + ScreenTools.defaultFontPixelWidth * 1.6
+                    height: topBar.chipH
+                    radius: 3
+                    color:        root.darkMode ? root.theme.cyan : "transparent"
+                    border.color: root.theme.cyan
+                    border.width: 1
+
+                    QGCLabel {
+                        id: themeLabel
+                        anchors.centerIn: parent
+                        text:  root.darkMode ? root.t("深色", "DARK") : root.t("浅色", "LIGHT")
+                        color: root.darkMode ? root.theme.onActive : root.theme.cyan
+                        font.pixelSize: panel.smlFont
+                        font.bold: true
+                    }
+                    MouseArea {
+                        anchors.fill: parent
+                        onClicked: root.darkMode = !root.darkMode
+                    }
+                }
+
+                Rectangle {
+                    id: langChip
+                    width:  langLabel.implicitWidth + ScreenTools.defaultFontPixelWidth * 1.6
+                    height: topBar.chipH
+                    radius: 3
+                    color:        root.englishMode ? root.theme.cyan : "transparent"
+                    border.color: root.theme.cyan
+                    border.width: 1
+
+                    QGCLabel {
+                        id: langLabel
+                        anchors.centerIn: parent
+                        text:  root.englishMode ? "EN" : "中"
+                        color: root.englishMode ? root.theme.onActive : root.theme.cyan
+                        font.pixelSize: panel.smlFont
+                        font.bold: true
+                    }
+                    MouseArea {
+                        anchors.fill: parent
+                        onClicked: root.englishMode = !root.englishMode
+                    }
+                }
+            }
+
+            // 右上角页签
+            Row {
+                anchors.right: toggles.left
+                anchors.rightMargin: ScreenTools.defaultFontPixelWidth * 1.2
                 anchors.verticalCenter: parent.verticalCenter
                 spacing: ScreenTools.defaultFontPixelWidth * 0.8
 
                 Repeater {
-                    model: [ qsTr("仪表"), qsTr("导航"), qsTr("专业模式") ]
+                    model: [ root.t("仪表", "PANEL"), root.t("导航", "MAP"), root.t("专业模式", "PRO") ]
                     delegate: Rectangle {
                         width:  tabLabel.implicitWidth + ScreenTools.defaultFontPixelWidth * 2.2
                         height: tabLabel.implicitHeight + ScreenTools.defaultFontPixelHeight * 0.9
                         radius: 3
-                        color:        index === 0 ? root.cBtnBg : "transparent"
-                        border.color: index === 0 ? root.cCyan : root.cBtnBd
+                        color:        index === 0 ? root.theme.btnBg : "transparent"
+                        border.color: index === 0 ? root.theme.cyan : root.theme.btnBd
                         border.width: 1
 
                         QGCLabel {
                             id: tabLabel
                             anchors.centerIn: parent
                             text: modelData
-                            color: index === 0 ? root.cCyan : root.cLabel
+                            color: index === 0 ? root.theme.cyan : root.theme.label
                             font.pixelSize: panel.smlFont
                             font.bold: index === 0
                         }
@@ -176,7 +287,7 @@ Item {
                 anchors.bottom: parent.bottom
                 width: parent.width
                 height: 1
-                color: root.cDivider
+                color: root.theme.divider
             }
         }
 
@@ -197,7 +308,7 @@ Item {
                     var ctx = getContext("2d")
                     var cx = width / 2, cy = height / 2, r = width / 2
                     ctx.reset()
-                    ctx.strokeStyle = "#1B4550"
+                    ctx.strokeStyle = root.theme.radar
                     ctx.lineWidth = 1
                     for (var i = 1; i <= 3; i++) {
                         ctx.beginPath()
@@ -215,8 +326,8 @@ Item {
                 width:  parent.width * 0.16
                 height: width
                 radius: width / 2
-                color: "#123942"
-                border.color: root.cCyanDim
+                color: root.theme.radarDot
+                border.color: root.theme.cyanDim
                 border.width: 1
             }
         }
@@ -235,7 +346,7 @@ Item {
                 anchors.left: parent.left
                 anchors.top: parent.top
                 text:  Math.round(root.gsKmh)
-                color: root.cCyan
+                color: root.theme.cyan
                 font.bold: true
                 font.pixelSize: panel.bigFont
             }
@@ -244,7 +355,7 @@ Item {
                 anchors.leftMargin: ScreenTools.defaultFontPixelWidth * 0.6
                 anchors.baseline: gsValue.bottom
                 text: "km/h"
-                color: root.cValue
+                color: root.theme.value
                 font.pixelSize: panel.midFont
                 font.italic: true
             }
@@ -252,8 +363,8 @@ Item {
                 anchors.left: gsValue.left
                 anchors.top: gsValue.bottom
                 anchors.topMargin: -panel.smlFont * 0.2
-                text: qsTr("地速") + "\n" + qsTr("地面速度")
-                color: root.cLabel
+                text: root.t("地速", "Ground") + "\n" + root.t("地面速度", "speed")
+                color: root.theme.label
                 font.pixelSize: panel.smlFont
             }
             QGCLabel {
@@ -262,7 +373,7 @@ Item {
                 anchors.top: gsValue.top
                 anchors.topMargin: panel.smlFont * 1.0
                 text: "GS " + root.fmt(root.gsKmh, 0) + " km/h"
-                color: root.cLabel
+                color: root.theme.label
                 font.pixelSize: panel.smlFont * 0.9
             }
 
@@ -279,14 +390,14 @@ Item {
                     anchors.verticalCenter: parent.verticalCenter
                     width: parent.width
                     height: parent.height * 0.26
-                    color: "#0C2229"
-                    border.color: root.cDivider
+                    color: root.theme.barTrack
+                    border.color: root.theme.divider
                     border.width: 1
 
                     Rectangle {
                         width: parent.width * Math.min(root.gsKmh / 65, 1)
                         height: parent.height
-                        color: root.cCyan
+                        color: root.theme.cyan
                         opacity: 0.55
                     }
                 }
@@ -296,17 +407,17 @@ Item {
                     anchors.verticalCenter: parent.verticalCenter
                     width: 2
                     height: parent.height * 0.8
-                    color: root.cRed
+                    color: root.theme.red
                 }
                 Row {
                     anchors.left: parent.left
                     anchors.right: parent.right
                     anchors.top: parent.top
-                    QGCLabel { text: "0";  color: root.cLabel; font.pixelSize: panel.smlFont * 0.85 }
+                    QGCLabel { text: "0";  color: root.theme.label; font.pixelSize: panel.smlFont * 0.85 }
                     Item { width: parent.width * 0.55 - 30; height: 1 }
-                    QGCLabel { text: "40"; color: root.cLabel; font.pixelSize: panel.smlFont * 0.85 }
+                    QGCLabel { text: "40"; color: root.theme.label; font.pixelSize: panel.smlFont * 0.85 }
                     Item { width: parent.width * 0.30; height: 1 }
-                    QGCLabel { text: "65"; color: root.cRed;   font.pixelSize: panel.smlFont * 0.85 }
+                    QGCLabel { text: "65"; color: root.theme.red;   font.pixelSize: panel.smlFont * 0.85 }
                 }
             }
 
@@ -321,25 +432,26 @@ Item {
                     id: climbLabel
                     anchors.left: parent.left
                     anchors.top: parent.top
-                    text: qsTr("升降速度") + "\n" + qsTr("油门/俯仰")
-                    color: root.cLabel
+                    text: root.t("升降速度", "Climb") + "\n" + root.t("油门/俯仰", "rate")
+                    color: root.theme.label
                     font.pixelSize: panel.smlFont
                 }
                 QGCLabel {
+                    id: climbValue
                     anchors.left: climbLabel.right
                     anchors.leftMargin: ScreenTools.defaultFontPixelWidth
                     anchors.bottom: climbLabel.bottom
                     text: root.fmt(root.climbMs, 1)
-                    color: root.cCyan
+                    color: root.theme.cyan
                     font.bold: true
                     font.pixelSize: panel.bigFont * 0.62
                 }
                 QGCLabel {
-                    anchors.left: climbLabel.right
-                    anchors.leftMargin: climbLabel.implicitWidth + ScreenTools.defaultFontPixelWidth * 4
-                    anchors.bottom: climbLabel.bottom
+                    anchors.left: climbValue.right
+                    anchors.leftMargin: ScreenTools.defaultFontPixelWidth * 0.4
+                    anchors.baseline: climbValue.baseline
                     text: "m/s"
-                    color: root.cValue
+                    color: root.theme.value
                     font.pixelSize: panel.midFont * 0.9
                 }
             }
@@ -375,7 +487,7 @@ Item {
                         var long = (a % 30 === 0)
                         var r1 = ringR - (long ? r * 0.075 : r * 0.04)
                         ctx.beginPath()
-                        ctx.strokeStyle = long ? "#9FB3BC" : "#3A4E57"
+                        ctx.strokeStyle = long ? root.theme.tickLong : root.theme.tickShort
                         ctx.moveTo(cx + Math.cos(rad) * ringR, cy + Math.sin(rad) * ringR)
                         ctx.lineTo(cx + Math.cos(rad) * r1,   cy + Math.sin(rad) * r1)
                         ctx.stroke()
@@ -393,7 +505,7 @@ Item {
                         else if (d === 180) lbl = "S"
                         else if (d === 270) lbl = "W"
                         else                lbl = ("00" + d).slice(-3)
-                        ctx.fillStyle = (d === 0 || d === 90 || d === 180 || d === 270) ? "#E8F4F8" : "#9FB3BC"
+                        ctx.fillStyle = (d === 0 || d === 90 || d === 180 || d === 270) ? root.theme.tickMain : root.theme.tickLong
                         ctx.fillText(lbl, cx + Math.cos(rr) * lr, cy + Math.sin(rr) * lr)
                     }
 
@@ -460,7 +572,7 @@ Item {
                     ctx.stroke()
 
                     // ---- 顶部航向指针（三角）----
-                    ctx.fillStyle = "#FFFFFF"
+                    ctx.fillStyle = root.theme.heading
                     ctx.beginPath()
                     ctx.moveTo(cx, cy - ringR + r * 0.02)
                     ctx.lineTo(cx - r * 0.035, cy - ringR + r * 0.075)
@@ -471,14 +583,14 @@ Item {
                     // ---- 内圆描边 ----
                     ctx.beginPath()
                     ctx.arc(cx, cy, pr, 0, Math.PI * 2)
-                    ctx.strokeStyle = "#DDE9EF"
+                    ctx.strokeStyle = root.theme.innerRing
                     ctx.lineWidth = Math.max(2, r * 0.008)
                     ctx.stroke()
 
                     // 外圈细描边
                     ctx.beginPath()
                     ctx.arc(cx, cy, ringR, 0, Math.PI * 2)
-                    ctx.strokeStyle = "#2A3D46"
+                    ctx.strokeStyle = root.theme.ringStroke
                     ctx.lineWidth = 1
                     ctx.stroke()
                 }
@@ -490,7 +602,7 @@ Item {
                 anchors.bottom: parent.top
                 anchors.bottomMargin: -ScreenTools.defaultFontPixelHeight * 0.2
                 text: "HDG " + ("00" + Math.round(root.headingDeg)).slice(-3) + "°"
-                color: root.cValue
+                color: root.theme.value
                 font.pixelSize: panel.midFont * 1.1
                 font.bold: true
             }
@@ -499,8 +611,8 @@ Item {
                 anchors.horizontalCenter: parent.horizontalCenter
                 anchors.bottom: parent.bottom
                 anchors.bottomMargin: -ScreenTools.defaultFontPixelHeight * 1.9
-                text: qsTr("横滚") + " " + root.fmt(root.rollDeg, 1) + "°   " + qsTr("俯仰") + " " + root.fmt(root.pitchDeg, 1) + "°"
-                color: root.cLabel
+                text: root.t("横滚", "Roll") + " " + root.fmt(root.rollDeg, 1) + "°   " + root.t("俯仰", "Pitch") + " " + root.fmt(root.pitchDeg, 1) + "°"
+                color: root.theme.label
                 font.pixelSize: panel.smlFont * 1.1
             }
 
@@ -527,7 +639,7 @@ Item {
 
                 QGCLabel {
                     text:  root.fmt(root.altRel, 1)
-                    color: root.cCyan
+                    color: root.theme.cyan
                     font.bold: true
                     font.pixelSize: panel.bigFont
                     anchors.baseline: altUnit.baseline
@@ -535,7 +647,7 @@ Item {
                 QGCLabel {
                     id: altUnit
                     text: "m"
-                    color: root.cValue
+                    color: root.theme.value
                     font.pixelSize: panel.midFont
                     font.italic: true
                     anchors.bottom: parent.bottom
@@ -547,14 +659,14 @@ Item {
                 spacing: panel.smlFont * 0.15
                 QGCLabel {
                     anchors.right: parent.right
-                    text: qsTr("相对起飞点高度")
-                    color: root.cLabel
+                    text: root.t("相对起飞点高度", "Relative alt")
+                    color: root.theme.label
                     font.pixelSize: panel.smlFont * 0.95
                 }
                 QGCLabel {
                     anchors.right: parent.right
-                    text: qsTr("离地高度") + " AGL " + root.fmt(root.altRel, 1) + " m"
-                    color: root.cLabel
+                    text: root.t("离地高度", "Height") + " AGL " + root.fmt(root.altRel, 1) + " m"
+                    color: root.theme.label
                     font.pixelSize: panel.smlFont * 0.95
                 }
             }
@@ -565,22 +677,22 @@ Item {
 
                 Repeater {
                     model: [
-                        { k: qsTr("至储备线"), v: "-- min" },
-                        { k: qsTr("电压"),     v: root.fmt(root.battVolt, 1) + " V" },
-                        { k: qsTr("电流"),     v: root.fmt(root.battAmp, 1) + " A" },
-                        { k: qsTr("电池温度"), v: isNaN(root.battTemp) ? "-- °C" : root.fmt(root.battTemp, 1) + " °C" }
+                        { k: root.t("至储备线", "To reserve"), v: "-- min" },
+                        { k: root.t("电压", "Volt"),     v: root.fmt(root.battVolt, 1) + " V" },
+                        { k: root.t("电流", "Curr"),     v: root.fmt(root.battAmp, 1) + " A" },
+                        { k: root.t("电池温度", "Batt temp"), v: isNaN(root.battTemp) ? "-- °C" : root.fmt(root.battTemp, 1) + " °C" }
                     ]
                     delegate: Row {
                         anchors.right: parent.right
                         spacing: ScreenTools.defaultFontPixelWidth * 0.6
                         QGCLabel {
                             text: modelData.k
-                            color: root.cLabel
+                            color: root.theme.label
                             font.pixelSize: panel.smlFont * 0.95
                         }
                         QGCLabel {
                             text: modelData.v
-                            color: root.cValue
+                            color: root.theme.value
                             font.pixelSize: panel.smlFont * 0.95
                             font.bold: true
                         }
@@ -591,13 +703,13 @@ Item {
                     anchors.right: parent.right
                     spacing: ScreenTools.defaultFontPixelWidth * 0.4
                     QGCLabel {
-                        text: qsTr("电量")
-                        color: root.cLabel
+                        text: root.t("电量", "Batt")
+                        color: root.theme.label
                         font.pixelSize: panel.smlFont * 0.95
                     }
                     QGCLabel {
                         text: root.battPct < 0 ? "-- %" : Math.round(root.battPct) + " %"
-                        color: root.battPct >= 0 && root.battPct < 25 ? root.cRed : root.cCyan
+                        color: root.battPct >= 0 && root.battPct < 25 ? root.theme.red : root.theme.cyan
                         font.pixelSize: panel.smlFont * 0.95
                         font.bold: true
                     }
@@ -608,7 +720,7 @@ Item {
                             delegate: Rectangle {
                                 width:  panel.smlFont * 0.40
                                 height: panel.smlFont * 0.60
-                                color: (root.battPct / 12.5 > index) ? (root.battPct < 25 ? root.cRed : "#35C759") : "#12262E"
+                                color: (root.battPct / 12.5 > index) ? (root.battPct < 25 ? root.theme.red : root.theme.cellOn) : root.theme.cellOff
                             }
                         }
                     }
@@ -616,8 +728,8 @@ Item {
 
                 QGCLabel {
                     anchors.right: parent.right
-                    text: qsTr("卫星") + " " + root.sats + "   " + qsTr("通信") + " " + root.linkText
-                    color: root.cLabel
+                    text: root.t("卫星", "SAT") + " " + root.sats + "   " + root.t("通信", "LINK") + " " + root.linkText
+                    color: root.theme.label
                     font.pixelSize: panel.smlFont * 0.9
                 }
             }
@@ -634,25 +746,30 @@ Item {
                 anchors.top: parent.top
                 width: parent.width
                 height: 1
-                color: root.cDivider
+                color: root.theme.divider
             }
 
             // 飞控解锁状态徽标
             Rectangle {
+                id: unlockBadge
                 anchors.left: parent.left
                 anchors.leftMargin: panel.sidePad
                 anchors.verticalCenter: parent.verticalCenter
-                width:  unlockLabel.implicitWidth + ScreenTools.defaultFontPixelWidth * 2
+                width:  Math.min(unlockLabel.implicitWidth + ScreenTools.defaultFontPixelWidth * 2,
+                                 parent.width * 0.28)
                 height: unlockLabel.implicitHeight + ScreenTools.defaultFontPixelHeight * 1.1
                 color: "transparent"
-                border.color: root.cDivider
+                border.color: root.theme.divider
                 border.width: 1
 
                 QGCLabel {
                     id: unlockLabel
                     anchors.centerIn: parent
-                    text: qsTr("飞控") + (root.hasVehicle && root.vehicle.armed ? qsTr("解锁") : qsTr("锁定"))
-                    color: root.hasVehicle && root.vehicle.armed ? root.cRed : root.cLabel
+                    width: parent.width * 0.9
+                    horizontalAlignment: Text.AlignHCenter
+                    elide: Text.ElideRight
+                    text: root.t("飞控", "FC") + (root.hasVehicle && root.vehicle.armed ? root.t("解锁", " ARMED") : root.t("锁定", " DISARMED"))
+                    color: root.hasVehicle && root.vehicle.armed ? root.theme.red : root.theme.label
                     font.pixelSize: panel.smlFont
                 }
             }
@@ -661,36 +778,39 @@ Item {
             RowLayout {
                 anchors.left: parent.left
                 anchors.right: parent.right
-                anchors.leftMargin:  panel.sidePad + unlockLabel.implicitWidth + ScreenTools.defaultFontPixelWidth * 4
+                anchors.leftMargin:  unlockBadge.x + unlockBadge.width + ScreenTools.defaultFontPixelWidth * 2
                 anchors.rightMargin: panel.sidePad
                 anchors.verticalCenter: parent.verticalCenter
                 spacing: ScreenTools.defaultFontPixelWidth * 0.5
 
                 Repeater {
                     model: [
-                        { t: qsTr("姿态"),       on: true  },
-                        { t: qsTr("定点"),       on: false },
-                        { t: qsTr("定高"),       on: false },
-                        { t: qsTr("起飞"),       on: false },
-                        { t: qsTr("降落"),       on: false },
-                        { t: qsTr("返航"),       on: false },
-                        { t: qsTr("保持待定义"), on: false },
-                        { t: qsTr("触屏接管"),   on: false },
-                        { t: qsTr("更多"),       on: false }
+                        { t: root.t("姿态", "Stab"),       on: true  },
+                        { t: root.t("定点", "Loiter"),       on: false },
+                        { t: root.t("定高", "AltHold"),       on: false },
+                        { t: root.t("起飞", "Takeoff"),       on: false },
+                        { t: root.t("降落", "Land"),       on: false },
+                        { t: root.t("返航", "RTL"),       on: false },
+                        { t: root.t("保持待定义", "HOLD"), on: false },
+                        { t: root.t("触屏接管", "Touch"),   on: false },
+                        { t: root.t("更多", "More"),       on: false }
                     ]
                     delegate: Rectangle {
                         Layout.fillWidth: true
                         Layout.preferredHeight: btnText.implicitHeight + ScreenTools.defaultFontPixelHeight * 1.5
                         radius: 3
-                        color:        modelData.on ? root.cActive : root.cBtnBg
-                        border.color: modelData.on ? root.cActive : root.cBtnBd
+                        color:        modelData.on ? root.theme.active : root.theme.btnBg
+                        border.color: modelData.on ? root.theme.active : root.theme.btnBd
                         border.width: 1
 
                         QGCLabel {
                             id: btnText
                             anchors.centerIn: parent
+                            width: parent.width * 0.92
+                            horizontalAlignment: Text.AlignHCenter
+                            elide: Text.ElideRight
                             text:  modelData.t
-                            color: modelData.on ? "#04241F" : root.cValue
+                            color: modelData.on ? root.theme.onActive : root.theme.value
                             font.pixelSize: panel.smlFont
                             font.bold: modelData.on
                         }
@@ -698,7 +818,7 @@ Item {
                         MouseArea {
                             anchors.fill: parent
                             onClicked: {
-                                if (modelData.t === qsTr("更多"))
+                                if (index === 8)            // 更多
                                     root.expanded = false
                             }
                         }
